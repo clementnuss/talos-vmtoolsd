@@ -22,6 +22,7 @@ import (
 // Debug flags.
 var (
 	talosTestQuery    string
+	rpcCmd            string
 	useMachinedSocket bool
 )
 
@@ -33,6 +34,7 @@ func main() {
 	})
 
 	flag.StringVar(&talosTestQuery, "test-apid-query", "", "query apid")
+	flag.StringVar(&talosTestQuery, "cmd", "", "send an RPC command to the host")
 	flag.BoolVar(&useMachinedSocket, "use-machined", false, "use machined unix socket")
 	flag.Parse()
 
@@ -114,6 +116,26 @@ func main() {
 	vmguestmsg.DefaultLogger = l.WithField("module", "vmware-guestinfo")
 	rpcIn, rpcOut := nanotoolbox.NewHypervisorChannelPair()
 	svc := nanotoolbox.NewService(l, rpcIn, rpcOut)
+
+	// Forwarding RPC command mode to Talos apid
+	if rpcCmd != "" {
+		if err := svc.Start(); err != nil {
+			l.WithError(err).Fatal("error starting service")
+			os.Exit(1) //nolint:gocritic
+		}
+
+		var reply []byte
+		if reply, err = svc.Out.Request([]byte(rpcCmd)); err != nil {
+			l.WithField("custom-rpc-cmd", rpcCmd).WithError(err).Fatal("custom RPC command failed")
+
+			os.Exit(1) //nolint:gocritic
+		}
+
+		fmt.Print(reply)
+
+		os.Exit(0)
+	}
+
 	tboxcmds.RegisterGuestInfoCommands(svc, api)
 	tboxcmds.RegisterPowerDelegate(svc, api)
 	tboxcmds.RegisterVixCommand(svc, api)
